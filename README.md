@@ -27,23 +27,23 @@ Bento is a cross-platform CLI tool that acts as a **project archiver**. It packa
 
 ## Installation
 
-### Prebuilt binaries (recommended)
+### Quick install (Linux/macOS)
 
-Download the latest binary from [GitHub Releases](https://github.com/Aboud04/bento/releases/latest):
-
-**Linux:**
 ```bash
-curl -fsSL https://github.com/Aboud04/bento/releases/latest/download/bento-linux-x86_64.tar.gz | tar xz -C ~/.local/bin/
+curl -fsSL https://raw.githubusercontent.com/Aboud04/bento/main/install.sh | bash
 ```
 
-**macOS:**
+Or with wget:
+
 ```bash
-curl -fsSL https://github.com/Aboud04/bento/releases/latest/download/bento-macos-aarch64.tar.gz | tar xz -C /usr/local/bin/
+wget -qO- https://raw.githubusercontent.com/Aboud04/bento/main/install.sh | bash
 ```
 
-**Windows:** Download `bento-windows-x86_64.zip` from the [Releases page](https://github.com/Aboud04/bento/releases/latest) and add it to your PATH.
+### Download manually
 
-### From source
+Grab the binary for your platform from [GitHub Releases](https://github.com/Aboud04/bento/releases/latest), extract it, and add it to your PATH.
+
+### From source (requires Rust)
 
 ```bash
 git clone https://github.com/Aboud04/bento.git
