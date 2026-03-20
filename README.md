@@ -39,6 +39,12 @@ Or with wget:
 wget -qO- https://raw.githubusercontent.com/Aboud04/bento/main/install.sh | bash
 ```
 
+### AUR (Arch Linux)
+
+```bash
+yay -S bento-box
+```
+
 ### Download manually
 
 Grab the binary for your platform from [GitHub Releases](https://github.com/Aboud04/bento/releases/latest), extract it, and add it to your PATH.
