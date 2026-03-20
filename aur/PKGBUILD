@@ -9,8 +9,7 @@ license=('MIT')
 provides=('bento' 'bt')
 conflicts=('bento')
 source=("https://github.com/Aboud04/bento/releases/download/v${pkgver}/bento-linux-x86_64.tar.gz")
-# sha256sums=('UPDATE_AFTER_FIRST_RELEASE')
-sha256sums=('SKIP')
+sha256sums=('90552ff0addf22fc291fe1b54d6fa60a195587d8b66a48318d574a2d9ac94ad2')
 
 package() {
     install -Dm755 bento "$pkgdir/usr/bin/bento"
