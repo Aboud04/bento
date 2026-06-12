@@ -106,6 +106,23 @@ fn init_fish_is_unsupported_and_does_not_write_config() {
     assert!(!tmp.path().join(".config/fish/config.fish").exists());
 }
 
+#[test]
+#[serial]
+fn uninit_fish_missing_config_reports_nothing_to_remove() {
+    let tmp = tempfile::tempdir().unwrap();
+    let mut cmd = bento();
+    cmd.arg("uninit");
+    cmd.env("HOME", tmp.path());
+    cmd.env("USERPROFILE", tmp.path());
+    cmd.env("SHELL", "/usr/bin/fish");
+
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("No shell wrapper found to remove."));
+
+    assert!(!tmp.path().join(".config/fish/config.fish").exists());
+}
+
 // ─── List ────────────────────────────────────────────────────
 
 #[test]

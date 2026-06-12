@@ -66,14 +66,16 @@ complete -F _bento_completions bt
 /// Includes auto-cd on unpack and zsh-native completions.
 const ZSH_WRAPPER: &str = r#"
 bento() {
-    local output
+    local output exit_status
     output=$(command bento "$@")
+    exit_status=$?
     if [[ "$output" == *"__bento_cd:"* ]]; then
         local dir="${output#*__bento_cd:}"
-        cd "$dir" || return
+        cd "$dir" || return $?
     else
-        echo "$output"
+        print -r -- "$output"
     fi
+    return $exit_status
 }
 
 bt() {
@@ -213,7 +215,14 @@ pub fn uninstall_wrapper() -> anyhow::Result<()> {
 
     let config_path = config_path_for_shell(&shell, &home)?;
 
-    let contents = std::fs::read_to_string(&config_path)?;
+    let contents = match std::fs::read_to_string(&config_path) {
+        Ok(contents) => contents,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            println!("No shell wrapper found to remove.");
+            return Ok(());
+        }
+        Err(err) => return Err(err.into()),
+    };
 
     let start_marker = "# >>> bento >>>";
     let end_marker = "# <<< bento <<<";
@@ -261,6 +270,8 @@ mod tests {
         assert_eq!(config_path, home.join(".zshrc"));
         assert!(wrapper.contains("compdef _bento_zsh_completions bento"));
         assert!(wrapper.contains("$words[2]"));
+        assert!(wrapper.contains("exit_status=$?"));
+        assert!(wrapper.contains("return $exit_status"));
         assert!(!wrapper.contains("COMP_WORDS"));
         assert!(!wrapper.contains("COMPREPLY"));
         assert!(!wrapper.contains("compgen"));
