@@ -68,6 +68,8 @@ bento init
 source ~/.bashrc   # or ~/.zshrc
 ```
 
+Bash and zsh shell integration are supported. Fish shell integration is not implemented yet.
+
 <details>
 <summary><strong>What does this do?</strong></summary>
 

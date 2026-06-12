@@ -84,7 +84,7 @@ pub fn run() -> anyhow::Result<()> {
         ]);
 
     let mut sorted_algos: Vec<_> = algo_counts.into_iter().collect();
-    sorted_algos.sort_by(|a, b| b.1.cmp(&a.1));
+    sorted_algos.sort_by_key(|(_, count)| std::cmp::Reverse(*count));
 
     for (algo, count) in sorted_algos {
         algo_table.add_row(vec![
