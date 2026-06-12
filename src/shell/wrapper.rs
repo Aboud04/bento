@@ -1,4 +1,6 @@
-/// Bash/Zsh shell wrapper function.
+use std::path::{Path, PathBuf};
+
+/// Bash shell wrapper function.
 /// Includes auto-cd on unpack and dynamic project name completions.
 const BASH_WRAPPER: &str = r#"
 bento() {
@@ -60,6 +62,73 @@ complete -F _bento_completions bento
 complete -F _bento_completions bt
 "#;
 
+/// Zsh shell wrapper function.
+/// Includes auto-cd on unpack and zsh-native completions.
+const ZSH_WRAPPER: &str = r#"
+bento() {
+    local output
+    output=$(command bento "$@")
+    if [[ "$output" == *"__bento_cd:"* ]]; then
+        local dir="${output#*__bento_cd:}"
+        cd "$dir" || return
+    else
+        echo "$output"
+    fi
+}
+
+bt() {
+    bento "$@"
+}
+
+_bento_zsh_completions() {
+    local -a commands projects
+
+    commands=(
+        pack list search unpack stats config init uninit delete rename info
+        export import history clean help
+    )
+
+    case "$words[2]" in
+        delete|unpack|info|rename|export)
+            projects=(${(f)"$(command bento list-projects 2>/dev/null)"})
+            _describe 'project' projects
+            ;;
+        pack)
+            _arguments \
+                '--algo[compression algorithm]:algorithm:((zstd gzip bzip2 xz lz4 snappy brotli))' \
+                '--repo[push to GitHub before archiving]' \
+                '--force[skip confirmation]' \
+                '--help[show help]'
+            ;;
+        config)
+            _arguments \
+                '--algo[default compression algorithm]:algorithm:((zstd gzip bzip2 xz lz4 snappy brotli))' \
+                '--help[show help]'
+            ;;
+        clean)
+            _arguments \
+                '--force[skip confirmation]' \
+                '--help[show help]'
+            ;;
+        import)
+            _arguments \
+                '--name[name for imported project]:name:' \
+                '--tag[tag for imported project]:tag:' \
+                '--algo[compression algorithm]:algorithm:((zstd gzip bzip2 xz lz4 snappy brotli))' \
+                '--help[show help]'
+            ;;
+        *)
+            _describe 'bento command' commands
+            ;;
+    esac
+}
+
+if (( $+functions[compdef] )); then
+    compdef _bento_zsh_completions bento
+    compdef _bento_zsh_completions bt
+fi
+"#;
+
 /// PowerShell wrapper function — same logic in PowerShell syntax.
 #[allow(dead_code)]
 const POWERSHELL_WRAPPER: &str = r#"
@@ -75,6 +144,34 @@ function bento {
 # <<< bento <<<
 "#;
 
+fn install_target_for_shell(shell: &str, home: &Path) -> anyhow::Result<(PathBuf, &'static str)> {
+    if shell.contains("zsh") {
+        Ok((home.join(".zshrc"), ZSH_WRAPPER))
+    } else if shell.contains("bash") {
+        Ok((home.join(".bashrc"), BASH_WRAPPER))
+    } else if shell.contains("fish") {
+        Err(anyhow::anyhow!(
+            "Fish shell integration is not implemented yet. Please add it manually."
+        ))
+    } else {
+        Err(anyhow::anyhow!(
+            "Unsupported shell: {shell}. Manually add the wrapper to your shell config."
+        ))
+    }
+}
+
+fn config_path_for_shell(shell: &str, home: &Path) -> anyhow::Result<PathBuf> {
+    if shell.contains("zsh") {
+        Ok(home.join(".zshrc"))
+    } else if shell.contains("bash") {
+        Ok(home.join(".bashrc"))
+    } else if shell.contains("fish") {
+        Ok(home.join(".config/fish/config.fish"))
+    } else {
+        Err(anyhow::anyhow!("Unsupported shell: {shell}"))
+    }
+}
+
 /// Installs the shell wrapper and completions into the user's shell config file.
 ///
 /// Detects the shell from $SHELL, picks the right config file
@@ -85,18 +182,10 @@ pub fn install_wrapper() -> anyhow::Result<()> {
 
     let shell = std::env::var("SHELL").unwrap_or_default();
 
-    let home = dirs::home_dir()
-        .ok_or_else(|| anyhow::anyhow!("Could not determine home directory"))?;
+    let home =
+        dirs::home_dir().ok_or_else(|| anyhow::anyhow!("Could not determine home directory"))?;
 
-    let (config_path, wrapper) = if shell.contains("zsh") {
-        (home.join(".zshrc"), BASH_WRAPPER)
-    } else if shell.contains("bash") {
-        (home.join(".bashrc"), BASH_WRAPPER)
-    } else if shell.contains("fish") {
-        (home.join(".config/fish/config.fish"), BASH_WRAPPER)
-    } else {
-        return Err(anyhow::anyhow!("Unsupported shell: {shell}. Manually add the wrapper to your shell config."));
-    };
+    let (config_path, wrapper) = install_target_for_shell(&shell, &home)?;
 
     let contents = std::fs::read_to_string(&config_path).unwrap_or_default();
     if contents.contains("# >>> bento >>>") {
@@ -107,10 +196,7 @@ pub fn install_wrapper() -> anyhow::Result<()> {
 
     let block = format!("\n# >>> bento >>>\n{}\n# <<< bento <<<\n", wrapper.trim());
 
-    let mut file = std::fs::OpenOptions::new()
-        .append(true)
-        .create(true)
-        .open(&config_path)?;
+    let mut file = std::fs::OpenOptions::new().append(true).create(true).open(&config_path)?;
     file.write_all(block.as_bytes())?;
 
     println!("Bento shell integration installed (auto-cd + tab completions).");
@@ -122,18 +208,10 @@ pub fn install_wrapper() -> anyhow::Result<()> {
 pub fn uninstall_wrapper() -> anyhow::Result<()> {
     let shell = std::env::var("SHELL").unwrap_or_default();
 
-    let home = dirs::home_dir()
-        .ok_or_else(|| anyhow::anyhow!("Could not determine home directory"))?;
+    let home =
+        dirs::home_dir().ok_or_else(|| anyhow::anyhow!("Could not determine home directory"))?;
 
-    let config_path = if shell.contains("zsh") {
-        home.join(".zshrc")
-    } else if shell.contains("bash") {
-        home.join(".bashrc")
-    } else if shell.contains("fish") {
-        home.join(".config/fish/config.fish")
-    } else {
-        return Err(anyhow::anyhow!("Unsupported shell: {shell}"));
-    };
+    let config_path = config_path_for_shell(&shell, &home)?;
 
     let contents = std::fs::read_to_string(&config_path)?;
 
@@ -146,7 +224,9 @@ pub fn uninstall_wrapper() -> anyhow::Result<()> {
     };
 
     let Some(end) = contents.find(end_marker) else {
-        return Err(anyhow::anyhow!("Found start marker but no end marker — config may be corrupted"));
+        return Err(anyhow::anyhow!(
+            "Found start marker but no end marker — config may be corrupted"
+        ));
     };
 
     let mut cleaned = String::new();
@@ -156,4 +236,52 @@ pub fn uninstall_wrapper() -> anyhow::Result<()> {
     std::fs::write(&config_path, cleaned)?;
     println!("Shell wrapper removed from {}", config_path.display());
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bash_install_target_uses_bashrc_and_bash_completion() {
+        let home = Path::new("/tmp/bento-home");
+
+        let (config_path, wrapper) = install_target_for_shell("/bin/bash", home).unwrap();
+
+        assert_eq!(config_path, home.join(".bashrc"));
+        assert!(wrapper.contains("complete -F _bento_completions bento"));
+    }
+
+    #[test]
+    fn zsh_install_target_uses_zshrc_and_zsh_completion() {
+        let home = Path::new("/tmp/bento-home");
+
+        let (config_path, wrapper) = install_target_for_shell("/usr/bin/zsh", home).unwrap();
+
+        assert_eq!(config_path, home.join(".zshrc"));
+        assert!(wrapper.contains("compdef _bento_zsh_completions bento"));
+        assert!(wrapper.contains("$words[2]"));
+        assert!(!wrapper.contains("COMP_WORDS"));
+        assert!(!wrapper.contains("COMPREPLY"));
+        assert!(!wrapper.contains("compgen"));
+        assert!(!wrapper.contains("complete -F"));
+    }
+
+    #[test]
+    fn fish_install_target_is_unsupported() {
+        let home = Path::new("/tmp/bento-home");
+
+        let err = install_target_for_shell("/usr/bin/fish", home).unwrap_err().to_string();
+
+        assert!(err.contains("Fish shell integration is not implemented yet"));
+    }
+
+    #[test]
+    fn fish_uninstall_still_uses_fish_config_path() {
+        let home = Path::new("/tmp/bento-home");
+
+        let config_path = config_path_for_shell("/usr/bin/fish", home).unwrap();
+
+        assert_eq!(config_path, home.join(".config/fish/config.fish"));
+    }
 }

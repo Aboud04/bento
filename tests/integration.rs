@@ -1,9 +1,27 @@
 use assert_cmd::Command;
 use predicates::prelude::*;
 use serial_test::serial;
+use std::{path::Path, sync::OnceLock};
+
+fn test_home() -> &'static Path {
+    static TEST_HOME: OnceLock<tempfile::TempDir> = OnceLock::new();
+    TEST_HOME.get_or_init(|| tempfile::tempdir().unwrap()).path()
+}
 
 fn bento() -> Command {
-    Command::cargo_bin("bento").unwrap()
+    let mut cmd = Command::cargo_bin("bento").unwrap();
+    cmd.env("HOME", test_home());
+    cmd.env("USERPROFILE", test_home());
+    cmd
+}
+
+fn bento_init_with_home_and_shell(home: &Path, shell: &str) -> Command {
+    let mut cmd = bento();
+    cmd.arg("init");
+    cmd.env("HOME", home);
+    cmd.env("USERPROFILE", home);
+    cmd.env("SHELL", shell);
+    cmd
 }
 
 // ─── Help & Version ──────────────────────────────────────────
@@ -35,6 +53,57 @@ fn no_args_shows_help() {
         .assert()
         .failure()
         .stderr(predicate::str::contains("Usage"));
+}
+
+// ─── Shell Integration ───────────────────────────────────────
+
+#[test]
+#[serial]
+fn init_zsh_installs_zsh_wrapper_in_temp_home() {
+    let tmp = tempfile::tempdir().unwrap();
+
+    bento_init_with_home_and_shell(tmp.path(), "/usr/bin/zsh")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Bento shell integration installed"));
+
+    let zshrc = std::fs::read_to_string(tmp.path().join(".zshrc")).unwrap();
+    assert!(zshrc.contains("# >>> bento >>>"));
+    assert!(zshrc.contains("compdef _bento_zsh_completions bento"));
+    assert!(zshrc.contains("bt()"));
+    assert!(!zshrc.contains("COMP_WORDS"));
+    assert!(!zshrc.contains("COMPREPLY"));
+    assert!(!zshrc.contains("compgen"));
+    assert!(!zshrc.contains("complete -F"));
+}
+
+#[test]
+#[serial]
+fn init_bash_still_installs_bash_wrapper_in_temp_home() {
+    let tmp = tempfile::tempdir().unwrap();
+
+    bento_init_with_home_and_shell(tmp.path(), "/usr/bin/bash")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Bento shell integration installed"));
+
+    let bashrc = std::fs::read_to_string(tmp.path().join(".bashrc")).unwrap();
+    assert!(bashrc.contains("# >>> bento >>>"));
+    assert!(bashrc.contains("complete -F _bento_completions bento"));
+    assert!(bashrc.contains("COMP_WORDS"));
+}
+
+#[test]
+#[serial]
+fn init_fish_is_unsupported_and_does_not_write_config() {
+    let tmp = tempfile::tempdir().unwrap();
+
+    bento_init_with_home_and_shell(tmp.path(), "/usr/bin/fish")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("Fish shell integration is not implemented yet"));
+
+    assert!(!tmp.path().join(".config/fish/config.fish").exists());
 }
 
 // ─── List ────────────────────────────────────────────────────
