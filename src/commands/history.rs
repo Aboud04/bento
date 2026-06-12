@@ -12,7 +12,7 @@ pub fn run() -> anyhow::Result<()> {
     }
 
     // Sort by timestamp, newest first
-    entries.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+    entries.sort_by_key(|entry| std::cmp::Reverse(entry.timestamp));
 
     let mut table = Table::new();
     table
